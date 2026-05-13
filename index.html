@@ -462,8 +462,16 @@
     <div class="legend">
       <div class="label" style="margin-bottom:8px;">節點類型</div>
       <div class="legend-grid" id="legend-nodes"></div>
-      <div class="label" style="margin:14px 0 8px;">邊類型</div>
-      <div class="legend-grid" id="legend-edges"></div>
+      <details style="margin-top:14px;">
+        <summary class="label legend-toggle" style="cursor:pointer; user-select:none; list-style:none;">
+          <span class="caret" style="display:inline-block; width:10px; transition:transform .15s;">▸</span> 邊類型
+        </summary>
+        <div class="legend-grid" id="legend-edges" style="margin-top:8px;"></div>
+      </details>
+      <style>
+        details[open] > summary.legend-toggle .caret { transform: rotate(90deg); }
+        summary.legend-toggle::-webkit-details-marker { display:none; }
+      </style>
     </div>
   </aside>
 
@@ -547,7 +555,7 @@
         "name_en": "Part Check",
         "type": "action",
         "feynman": "像「上菜前先檢查食材」——零件外觀規格不對就不准入線。",
-        "tags": ["流程", "START"]
+        "tags": ["#human", "流程", "START"]
       },
       "detail": {
         "detail": "新批號零件進線前先目視 + 量測，確認與工單一致再倒入震動桶。",
@@ -569,9 +577,9 @@
       "core": {
         "name": "震動桶入料",
         "name_en": "Feed Part",
-        "type": "tool",
+        "type": "action",
         "feynman": "像「排隊輸送帶」——靠震動把亂跳的零件排成同一方向。",
-        "tags": ["流程", "供料"]
+        "tags": ["#machine", "流程", "供料"]
       },
       "detail": {
         "detail": "透過振幅與軌道角度將零件方向排好供手臂抓取。",
@@ -669,7 +677,7 @@
         "name_en": "Parts Assembly",
         "type": "action",
         "feynman": "像「夾肉進麵包」——機械手臂把消音器先放到塞子上組合。",
-        "tags": ["流程", "決策點"]
+        "tags": ["#decision", "流程", "決策點"]
       },
       "detail": {
         "detail": "手臂依程式把消音器與塞子初步結合定位，OK 才往點膠站，NG 進 NG 桶。",
@@ -691,9 +699,9 @@
       "core": {
         "name": "VC-3 點膠",
         "name_en": "VC-3 Dispensing",
-        "type": "tool",
+        "type": "action",
         "feynman": "像「擠美乃滋的細嘴瓶」——對準螺紋中心擠出剛好的量。",
-        "tags": ["流程", "耗材"]
+        "tags": ["#machine", "流程", "耗材"]
       },
       "detail": {
         "detail": "點膠針頭對準螺紋根部擠出 VC-3 膠水；針頭每日需清潔避免堵塞。",
@@ -741,9 +749,9 @@
       "core": {
         "name": "稀釋比例",
         "name_en": "Dilution Ratio",
-        "type": "tool",
+        "type": "action",
         "feynman": "像調醬料——10 份美乃滋配 0.3 份水才會剛好順口。",
-        "tags": ["參數"]
+        "tags": ["#human", "參數"]
       },
       "detail": {
         "detail": "VC-3:甲苯 = 10:0.3 (約 3%)，提升流動性並縮短乾燥時間。",
@@ -791,7 +799,7 @@
         "name_en": "Fill Rate ≥75%",
         "type": "action",
         "feynman": "像「漢堡醬料蓋得夠不夠滿」——超過 3/4 才算合格。",
-        "tags": ["品質", "規格"]
+        "tags": ["#decision", "品質", "規格"]
       },
       "detail": {
         "detail": "螺紋根部填充率須 ≥ 75%，最小覆蓋面積 5.0，由視覺感測器即時檢核。",
@@ -814,9 +822,9 @@
       "core": {
         "name": "輸送帶烘乾＆壓合區",
         "name_en": "Conveyor / Drying / Press",
-        "type": "tool",
+        "type": "action",
         "feynman": "像最後「壓實 + 烤一下」——把消音器壓進塞子並烘到膠固化。",
-        "tags": ["流程", "核心設備"]
+        "tags": ["#machine", "流程", "核心設備"]
       },
       "detail": {
         "detail": "輸送帶帶動工件進入烘乾區固化 VC-3，再由壓合氣缸 (0.5~0.6 MPa) 壓入塞子完成組裝。",
@@ -939,14 +947,14 @@
     { "from": "muffler",         "to": "parts_assembly",   "type": "depends_on", "label": "供肉",         "weight": 0.85 },
     { "from": "retainer_plug",   "to": "parts_assembly",   "type": "depends_on", "label": "供麵包",       "weight": 0.85 },
     { "from": "nachi_robot",     "to": "parts_assembly",   "type": "depends_on", "label": "手臂執行結合", "weight": 0.9 },
-    { "from": "parts_assembly",  "to": "dispense_needle",  "type": "depends_on", "label": "OK 後點膠",    "weight": 0.95 },
-    { "from": "parts_assembly",  "to": "ng_bin_assembly",  "type": "influences", "label": "結合 NG 入桶", "weight": 0.6 },
+    { "from": "parts_assembly",  "to": "dispense_needle",  "type": "depends_on", "label": "OK 後點膠",    "weight": 0.95, "branch": "yes" },
+    { "from": "parts_assembly",  "to": "ng_bin_assembly",  "type": "influences", "label": "結合 NG 入桶", "weight": 0.6,  "branch": "no" },
     { "from": "dispense_needle", "to": "vc3_glue",         "type": "depends_on", "label": "輸送膠水",     "weight": 0.8 },
     { "from": "vc3_glue",        "to": "dilution_ratio",   "type": "influences", "label": "需 3% 稀釋",   "weight": 0.7 },
     { "from": "dispense_needle", "to": "sensor",           "type": "depends_on", "label": "送入檢核",     "weight": 0.9 },
     { "from": "sensor",          "to": "fill_rate_75",     "type": "validates",  "label": "判定 ≥75%",    "weight": 0.95 },
-    { "from": "fill_rate_75",    "to": "press_cylinder",   "type": "depends_on", "label": "OK 進壓合",    "weight": 0.95 },
-    { "from": "fill_rate_75",    "to": "ng_bin_glue",      "type": "influences", "label": "未達標入桶",   "weight": 0.6 },
+    { "from": "fill_rate_75",    "to": "press_cylinder",   "type": "depends_on", "label": "OK 進壓合",    "weight": 0.95, "branch": "yes" },
+    { "from": "fill_rate_75",    "to": "ng_bin_glue",      "type": "influences", "label": "未達標入桶",   "weight": 0.6,  "branch": "no" },
     { "from": "press_cylinder",  "to": "finished_product", "type": "depends_on", "label": "壓合烘乾完成", "weight": 0.95 },
     { "from": "safety_stop",     "to": "nachi_robot",      "type": "blocks",     "label": "急停斷電",     "weight": 0.95 }
   ],
@@ -1134,6 +1142,49 @@ const EDGE_TYPE_VIS = {
   validates:  { color: 'var(--e-validates)',  dash: '2,3',       label: '驗證' },
 };
 
+// Edge 語意分組（顯示用；schema 不變）
+const EDGE_GROUPS = [
+  { key: 'forward', label: '前進', types: ['foundation', 'depends_on', 'contains'] },
+  { key: 'side',    label: '旁路', types: ['influences', 'extends', 'validates']   },
+  { key: 'reverse', label: '反向', types: ['blocks']                                },
+];
+
+// Action 子類（由 node.tags 觸發；無相符 tag 則維持基底樣式）
+const ACTION_SUBTYPE_VIS = {
+  '#machine':  { color: 'var(--n-action)', icon: '⚙',  label: '機台動作' },
+  '#human':    { color: '#fb923c',         icon: '👤', label: '人為動作' },
+  '#decision': { color: '#fbbf24',         icon: '?',  label: '判斷' },
+};
+
+// Edge branch（OK/NG 分流；由 edge.branch 觸發）
+const BRANCH_VIS = {
+  yes: { color: '#34d399', dash: null,    label: 'OK' },
+  no:  { color: '#f87171', dash: '6,3',   label: 'NG' },
+};
+
+function getNodeVis(d) {
+  const base = NODE_TYPE_VIS[d.type];
+  if (d.type === 'action' && Array.isArray(d.tags)) {
+    for (const t of d.tags) {
+      const key = t.startsWith('#') ? t : `#${t}`;
+      if (ACTION_SUBTYPE_VIS[key]) {
+        const sub = ACTION_SUBTYPE_VIS[key];
+        return { ...base, color: sub.color, icon: sub.icon, subLabel: sub.label };
+      }
+    }
+  }
+  return base;
+}
+
+function getEdgeStyle(d) {
+  const base = EDGE_TYPE_VIS[d.type];
+  if (d.branch && BRANCH_VIS[d.branch]) {
+    const b = BRANCH_VIS[d.branch];
+    return { color: b.color, dash: b.dash, markerKey: `branch-${d.branch}` };
+  }
+  return { color: base.color, dash: base.dash, markerKey: d.type };
+}
+
 // Shape path generators centered at (0,0). r = "radius" hint.
 const SHAPE_PATH = {
   circle:    (r) => `M${-r},0 a${r},${r} 0 1,0 ${2*r},0 a${r},${r} 0 1,0 ${-2*r},0 Z`,
@@ -1320,22 +1371,69 @@ function renderLegend() {
       <span><strong style="color:var(--text);">${vis.label}</strong> · ${vis.semantic}</span>
     `;
     nodes.appendChild(row);
+    // Action 子類緊跟在「操作」底下
+    if (type === 'action') {
+      Object.entries(ACTION_SUBTYPE_VIS).forEach(([tag, sub]) => {
+        const subRow = document.createElement('div');
+        subRow.className = 'legend-item';
+        subRow.style.paddingLeft = '14px';
+        subRow.innerHTML = `
+          <span class="legend-swatch">
+            <svg viewBox="-16 -16 32 32">
+              <path d="${SHAPE_PATH.diamond(12)}" fill="${sub.color}" opacity="0.85"
+                    stroke="${sub.color}" stroke-width="1.5"/>
+              <text x="0" y="4" text-anchor="middle" font-size="11" fill="#0b0f17">${sub.icon}</text>
+            </svg>
+          </span>
+          <span style="color:var(--muted);">└ ${sub.label} <code style="color:${sub.color};">${tag}</code></span>
+        `;
+        nodes.appendChild(subRow);
+      });
+    }
   });
-  // Edges
+  // Edges — A + C：只顯示實際用到的類型 + 按語意分組
   const edges = document.getElementById('legend-edges');
   edges.innerHTML = '';
-  Object.entries(EDGE_TYPE_VIS).forEach(([type, vis]) => {
+  const usedTypes = new Set((STATE.graph.edges || []).map(e => e.type));
+  EDGE_GROUPS.forEach(group => {
+    const visibleTypes = group.types.filter(t => usedTypes.has(t));
+    if (visibleTypes.length === 0) return;
+    const header = document.createElement('div');
+    header.className = 'legend-group';
+    header.style.cssText = 'margin-top:8px; font-size:11px; color:var(--muted); letter-spacing:1px;';
+    header.textContent = group.label;
+    edges.appendChild(header);
+    visibleTypes.forEach(type => {
+      const vis = EDGE_TYPE_VIS[type];
+      const row = document.createElement('div');
+      row.className = 'legend-item';
+      row.innerHTML = `
+        <span class="legend-swatch">
+          <svg viewBox="0 0 24 12">
+            <line x1="2" y1="6" x2="22" y2="6"
+                  stroke="${vis.color}" stroke-width="2"
+                  ${vis.dash ? `stroke-dasharray="${vis.dash}"` : ''}/>
+          </svg>
+        </span>
+        <span>${vis.label} <span style="color:var(--muted);">(${type})</span></span>
+      `;
+      edges.appendChild(row);
+    });
+  });
+  // Branch legend (OK/NG flow override)
+  Object.entries(BRANCH_VIS).forEach(([key, b]) => {
     const row = document.createElement('div');
     row.className = 'legend-item';
+    row.style.paddingLeft = '14px';
     row.innerHTML = `
       <span class="legend-swatch">
         <svg viewBox="0 0 24 12">
           <line x1="2" y1="6" x2="22" y2="6"
-                stroke="${vis.color}" stroke-width="2"
-                ${vis.dash ? `stroke-dasharray="${vis.dash}"` : ''}/>
+                stroke="${b.color}" stroke-width="3"
+                ${b.dash ? `stroke-dasharray="${b.dash}"` : ''}/>
         </svg>
       </span>
-      <span>${vis.label} <span style="color:var(--muted);">(${type})</span></span>
+      <span style="color:var(--muted);">└ ${b.label} 分流 <code style="color:${b.color};">branch:${key}</code></span>
     `;
     edges.appendChild(row);
   });
@@ -1351,9 +1449,14 @@ function renderGraph() {
 
   // Marker defs (arrowheads per edge type)
   const defs = svg.append('defs');
-  Object.entries(EDGE_TYPE_VIS).forEach(([type, vis]) => {
+  const markerEntries = [
+    ...Object.entries(EDGE_TYPE_VIS).map(([k, v]) => [k, v.color]),
+    ['branch-yes', BRANCH_VIS.yes.color],
+    ['branch-no',  BRANCH_VIS.no.color],
+  ];
+  markerEntries.forEach(([key, color]) => {
     defs.append('marker')
-      .attr('id', `arrow-${type}`)
+      .attr('id', `arrow-${key}`)
       .attr('viewBox', '0 -5 10 10')
       .attr('refX', 14)
       .attr('refY', 0)
@@ -1362,7 +1465,7 @@ function renderGraph() {
       .attr('orient', 'auto')
       .append('path')
         .attr('d', 'M0,-5L10,0L0,5')
-        .attr('fill', vis.color);
+        .attr('fill', color);
   });
 
   // Zoomable group
@@ -1397,11 +1500,11 @@ function renderGraph() {
     .data(edges)
     .join('path')
       .attr('class', 'edge')
-      .attr('stroke', d => EDGE_TYPE_VIS[d.type].color)
-      .attr('stroke-width', d => 1 + (d.weight ?? 0.5) * 2.5)
-      .attr('stroke-dasharray', d => EDGE_TYPE_VIS[d.type].dash || null)
+      .attr('stroke', d => getEdgeStyle(d).color)
+      .attr('stroke-width', d => (d.branch ? 2.2 : 1) + (d.weight ?? 0.5) * 2.5)
+      .attr('stroke-dasharray', d => getEdgeStyle(d).dash || null)
       .attr('opacity', d => 0.4 + (d.weight ?? 0.5) * 0.5)
-      .attr('marker-end', d => `url(#arrow-${d.type})`);
+      .attr('marker-end', d => `url(#arrow-${getEdgeStyle(d).markerKey})`);
 
   // Edge labels
   const edgeLabelSel = root.append('g').attr('class', 'edge-labels')
@@ -1425,11 +1528,23 @@ function renderGraph() {
 
   nodeSel.append('path')
     .attr('class', d => `node-shape ${d.type === 'risk' ? 'risk' : ''}`)
-    .attr('d', d => SHAPE_PATH[NODE_TYPE_VIS[d.type].shape](NODE_R))
-    .attr('fill', d => NODE_TYPE_VIS[d.type].color)
+    .attr('d', d => SHAPE_PATH[getNodeVis(d).shape](NODE_R))
+    .attr('fill', d => getNodeVis(d).color)
     .attr('fill-opacity', 0.18)
-    .attr('stroke', d => NODE_TYPE_VIS[d.type].color)
-    .attr('color', d => NODE_TYPE_VIS[d.type].color);
+    .attr('stroke', d => getNodeVis(d).color)
+    .attr('color', d => getNodeVis(d).color);
+
+  // Subtype icon badge (left-top of action subtypes)
+  nodeSel.filter(d => getNodeVis(d).icon)
+    .append('text')
+      .attr('class', 'node-subtype-icon')
+      .attr('x', -NODE_R + 6)
+      .attr('y', -NODE_R + 14)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', '14')
+      .attr('fill', d => getNodeVis(d).color)
+      .attr('pointer-events', 'none')
+      .text(d => getNodeVis(d).icon);
 
   // Status ring overlay
   nodeSel.filter(d => d.status === 'completed' || d.status === 'in_progress' || d.status === 'stuck')
