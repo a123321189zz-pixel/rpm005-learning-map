@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Learning Map v2 · NOBOOKTOMAP</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --bg: #0b0f1a;
+    --panel: #131a2a;
+    --panel-2: #182033;
+    --panel-3: #1f2940;
+    --text: #f7f7fb;
+    --muted: #9ca8bf;
+    --line: #2b3652;
+    --purple: #8f5cff;       /* RESERVED: foundation edge semantic — do not use in UI chrome */
+    --purple-soft: #b48cff;  /* UI accent: hover / active / focus states */
+    --blue: #4f8cff;
+    --teal: #35d3c4;
+    --green: #35d39d;
+    --gold: #ffd166;
+    --red: #ff5d68;
+    --orange: #ff8c42;
+    --gray: #8492b0;
+    /* Node type visual encoding (redundant: hue × shape × border) */
+    --n-concept: #4f8cff;
+    --n-action:  #35d39d;
+    --n-tool:    #8492b0;
+    --n-risk:    #ff5d68;
+    --n-output:  #ffd166;
+    /* Edge type colors */
+    --e-foundation: #8f5cff;
+    --e-depends_on: #4f8cff;
+    --e-influences: #9ca8bf;
+    --e-extends:    #b48cff;
+    --e-contains:   #ffd166;
+    --e-blocks:     #ff5d68;
+    --e-validates:  #35d39d;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    background: var(--bg);
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif;
+  }
+  button, textarea { font: inherit; color: inherit; }
+  .app {
+    display: grid;
+    grid-template-columns: minmax(260px, 25%) minmax(300px, 25%) minmax(460px, 50%);
+    height: 100vh;
+  }
+  .sidebar, .detail {
+    background: var(--panel);
+    overflow: auto;
+  }
+  .sidebar { border-right: 1px solid var(--line); padding: 22px 18px; }
+  .detail  { border-right: 1px solid var(--line); padding: 22px; }
+  .map {
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(ellipse at center, #131a2a 0%, #0b0f1a 70%);
+  }
+  /* ============================================================
+     Font hierarchy (4 levels, per visual-design-rules)
+       L1 22px - title (h1)
+       L2 16px - section heading (h2, h3)
+       L3 13px - body text
+       L4 11px - labels / captions / chips
+       Exception 9px - canvas micro text only (edge-label, name-en)
+     ============================================================ */
+  h1, h2, h3, h4, p { margin: 0; }
+  h1 { font-size: 22px; line-height: 1.3; }
+  h2 { font-size: 16px; line-height: 1.4; }
+  h3 { font-size: 16px; line-height: 1.4; }
+  .summary { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+  .section-title {
+    margin: 22px 0 10px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  /* Trail list */
+  .trail-list { display: grid; gap: 8px; }
+  .trail-button {
+    width: 100%;
+    padding: 10px 12px;
+    text-align: left;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .trail-button:hover { border-color: var(--purple-soft); background: #b48cff14; }
+  .trail-button.active { border-color: var(--purple-soft); background: #b48cff24; }
+  .trail-button strong { display: block; margin-bottom: 4px; font-size: 13px; }
+  .trail-button span { display: block; color: var(--muted); font-size: 11px; line-height: 1.5; }
+  /* Progress */
+  .progress {
+    margin-top: 16px;
+    padding: 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .progress-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+  .progress-bar { height: 6px; margin-top: 8px; overflow: hidden; background: var(--bg); border-radius: 999px; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width .3s; }
+  /* Legend */
+  .legend { margin-top: 18px; padding: 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; }
+  .legend-grid { display: grid; gap: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+  .legend-swatch {
+    width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .legend-swatch svg { width: 100%; height: 100%; }
+  /* Detail panel */
+  .detail-empty { color: var(--muted); font-size: 13px; line-height: 1.7; }
+  .node-type-chip {
+    display: inline-block;
+    padding: 2px 10px;
+    margin-bottom: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    border-radius: 999px;
+    text-transform: uppercase;
+  }
+  .feynman {
+    margin: 14px 0;
+    padding: 12px 14px;
+    color: var(--text);
+    background: var(--panel-2);
+    border-left: 3px solid var(--purple-soft);
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  /* lightbulb prefix removed per user preference */
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .tag {
+    padding: 2px 8px;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--panel-3);
+    border-radius: 4px;
+  }
+  /* Collapsible section */
+  details { margin-top: 12px; }
+  details summary {
+    cursor: pointer;
+    padding: 10px 12px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    list-style: none;
+    user-select: none;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before { content: "▸ "; display: inline-block; transition: transform .15s; }
+  details[open] summary::before { content: "▾ "; }
+  details summary:hover { color: var(--text); border-color: var(--purple-soft); }
+  details > div { padding: 12px 4px 4px; font-size: 13px; line-height: 1.7; }
+  details ul { margin: 6px 0; padding-left: 22px; }
+  details li { margin: 4px 0; }
+  .label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .confusion { color: var(--orange); }
+  /* P0: risk node common_confusion always-on banner */
+  .risk-alert {
+    margin: 14px 0;
+    padding: 12px 14px;
+    background: #ff5d6814;
+    border: 2px solid var(--red);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .risk-alert::before { content: "⚠️ "; font-size: 14px; }
+  .risk-alert .label { display: block; margin-bottom: 4px; color: var(--red); }
+  .resources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .resource-chip {
+    padding: 3px 8px;
+    font-size: 11px;
+    color: var(--purple-soft);
+    background: #8f5cff1a;
+    border: 1px solid #8f5cff44;
+    border-radius: 4px;
+  }
+  /* Status badge */
+  .status-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    border-radius: 4px;
+    text-transform: uppercase;
+  }
+  .status-not_started  { background: #2b365266; color: var(--muted); }
+  .status-in_progress  { background: #4f8cff33; color: var(--blue); }
+  .status-completed    { background: #35d39d33; color: var(--green); }
+  .status-stuck        { background: #ff5d6833; color: var(--red); }
+  /* Status control buttons in detail panel */
+  .status-controls { margin-top: 14px; }
+  .status-btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .status-btns button {
+    flex: 1;
+    min-width: 64px;
+    padding: 6px 8px;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .status-btns button:hover { color: var(--text); }
+  .status-btns button.active { color: var(--text); font-weight: 700; }
+  .status-btns button.active[data-status="not_started"] { border-color: var(--muted); background: #2b365266; }
+  .status-btns button.active[data-status="in_progress"] { border-color: var(--blue);  background: #4f8cff33; }
+  .status-btns button.active[data-status="completed"]   { border-color: var(--green); background: #35d39d33; }
+  .status-btns button.active[data-status="stuck"]       { border-color: var(--red);   background: #ff5d6833; }
+  /* Map canvas */
+  #graph { width: 100%; height: 100%; cursor: grab; }
+  #graph:active { cursor: grabbing; }
+  .node-shape { stroke-width: 2px; transition: stroke-width .15s, filter .15s; cursor: pointer; }
+  .node-shape:hover { filter: drop-shadow(0 0 8px currentColor); }
+  .node-shape.selected { stroke-width: 4px; filter: drop-shadow(0 0 12px currentColor); }
+  .node-shape.dimmed { opacity: 0.35; }
+  .node-shape.risk { filter: drop-shadow(0 0 6px var(--n-risk)); }
+  .node-label {
+    fill: var(--text);
+    font-size: 11px;
+    font-weight: 600;
+    text-anchor: middle;
+    pointer-events: none;
+    paint-order: stroke;
+    stroke: var(--bg);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+  }
+  .node-feynman {
+    fill: var(--muted);
+    font-size: 11px;
+    text-anchor: middle;
+    pointer-events: none;
+    paint-order: stroke;
+    stroke: var(--bg);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+  }
+  .node-label.dimmed, .node-feynman.dimmed { opacity: 0.4; }
+  .node-label tspan.name-en {
+    font-size: 9px;
+    font-weight: 400;
+    fill: var(--muted);
+  }
+  .detail-name-en {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+  }
+  .edge { fill: none; pointer-events: none; transition: opacity .15s; }
+  .edge.dimmed { opacity: 0.12; }
+  .edge-label {
+    fill: var(--muted);
+    font-size: 9px;
+    text-anchor: middle;
+    pointer-events: none;
+    paint-order: stroke;
+    stroke: var(--bg);
+    stroke-width: 2px;
+    stroke-linejoin: round;
+  }
+  .edge-label.dimmed { opacity: 0.15; }
+  /* Map overlay */
+  .map-toolbar {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    display: flex;
+    gap: 6px;
+    z-index: 10;
+  }
+  .map-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .map-btn:hover { color: var(--text); border-color: var(--purple-soft); }
+  .map-btn.active { color: var(--purple-soft); border-color: var(--purple-soft); }
+  .map-btn svg { width: 18px; height: 18px; display: block; }
+  /* P2: trail stepper bar (shows trail step order when a trail is active) */
+  .trail-stepper {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    right: 240px;
+    padding: 8px 12px;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    z-index: 8;
+    white-space: nowrap;
+    font-size: 11px;
+  }
+  .stepper-trail-name {
+    color: var(--purple-soft);
+    font-weight: 700;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  .stepper-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--panel-3);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all .15s;
+    flex-shrink: 0;
+  }
+  .stepper-step:hover { color: var(--text); border-color: var(--purple-soft); }
+  .stepper-step.selected { color: var(--text); border-color: var(--purple-soft); background: #b48cff24; }
+  .stepper-step.completed { color: var(--green); border-color: var(--green); }
+  .stepper-step.stuck { color: var(--red); border-color: var(--red); }
+  .step-num {
+    width: 18px; height: 18px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--bg);
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 11px;
+  }
+  .stepper-step.completed .step-num { background: var(--green); color: var(--bg); border-color: var(--green); }
+  .step-arrow {
+    color: var(--muted);
+    user-select: none;
+    flex-shrink: 0;
+  }
+  .map-status {
+    position: absolute;
+    bottom: 14px;
+    left: 14px;
+    padding: 6px 12px;
+    color: var(--muted);
+    font-size: 11px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    z-index: 10;
+  }
+  .error-banner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    text-align: center;
+    background: var(--bg);
+    z-index: 100;
+  }
+  .error-banner div { max-width: 500px; }
+  .error-banner h2 { color: var(--red); margin-bottom: 12px; }
+  .error-banner code {
+    display: inline-block;
+    margin: 10px 4px;
+    padding: 4px 10px;
+    color: var(--gold);
+    background: var(--panel);
+    border-radius: 4px;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 11px;
+  }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--purple-soft); }
+  /* P1: Initial loading splash */
+  .loading-splash {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    background: var(--bg);
+    color: var(--muted);
+    font-size: 13px;
+    z-index: 9999;
+    transition: opacity .35s ease-out;
+  }
+  .loading-splash.hidden { opacity: 0; pointer-events: none; }
+  .loading-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid var(--line);
+    border-top-color: var(--purple-soft);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="loading-splash" id="loading-splash">
+  <div class="loading-spinner"></div>
+  <div>載入中…</div>
+</div>
+<div class="app">
+  <!-- Column 1: Sidebar -->
+  <aside class="sidebar">
+    <h1 id="title">Learning Map</h1>
+    <p class="summary" id="summary"></p>
+
+    <div class="section-title">學習路徑 Trails</div>
+    <div class="trail-list" id="trail-list"></div>
+
+    <div class="progress" id="progress-block" style="display:none;">
+      <div class="progress-row">
+        <span id="progress-label">整體進度</span>
+        <span id="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    </div>
+
+    <div class="section-title">圖例 Legend</div>
+    <div class="legend">
+      <div class="label" style="margin-bottom:8px;">節點類型</div>
+      <div class="legend-grid" id="legend-nodes"></div>
+      <div class="label" style="margin:14px 0 8px;">邊類型</div>
+      <div class="legend-grid" id="legend-edges"></div>
+    </div>
+  </aside>
+
+  <!-- Column 2: Detail panel -->
+  <section class="detail" id="detail">
+    <div class="detail-empty">
+      <h2>👈 點擊地圖上的節點查看詳情</h2>
+      <p style="margin-top:12px;">
+        每個節點預設只顯示「名稱 + 比喻 + 類型」，點擊下方折疊區可漸進展開細節與額外補充。
+      </p>
+    </div>
+  </section>
+
+  <!-- Column 3: Map -->
+  <main class="map">
+    <svg id="graph"></svg>
+    <div class="map-toolbar">
+      <button class="map-btn" id="btn-zoom-in" title="放大">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+      </button>
+      <button class="map-btn" id="btn-zoom-out" title="縮小">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="8" y1="11" x2="14" y2="11"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+      </button>
+      <button class="map-btn" id="btn-fit" title="重置視角">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V4h4"/><path d="M20 8V4h-4"/><path d="M4 16v4h4"/><path d="M20 16v4h-4"/></svg>
+      </button>
+      <button class="map-btn" id="btn-pause" title="凍結/解凍布局">
+        <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+        <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><polygon points="6,4 20,12 6,20"/></svg>
+      </button>
+      <button class="map-btn active" id="btn-rings" title="顯示/隱藏狀態環">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+      </button>
+      <button class="map-btn" id="btn-clear" title="清除選擇">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="trail-stepper" id="trail-stepper" style="display:none;"></div>
+    <div class="map-status" id="map-status">載入中...</div>
+    <div class="error-banner" id="error-banner" style="display:none;">
+      <div>
+        <h2>⚠️ 資料載入失敗</h2>
+        <p id="error-detail" style="margin-top:14px; color:var(--muted); font-size:11px;"></p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!--
+  ============================================================
+  Inline data block (single-file mode, no server required).
+  Source-of-truth JSONs on disk:
+    - learning-map.json   → data.graph
+    - ontology.json       → data.ontology
+    - resources.json      → data.resources
+    - progress.example.json → data.progress (optional)
+  To refresh: edit the .json file, then paste contents into the
+  matching key below.
+  ============================================================
+-->
+<script type="application/json" id="lm-data">
+{
+  "graph": {
+  "schema": "learning-map/v2",
+  "meta": {
+    "id": "mac_muffler_assembly",
+    "title": "MAC Valves 消音器自動組裝機 (RPM005)",
+    "summary": "依 Pp-313-MVT-RPM005 官方流程圖：進料檢查 → 震動桶入料 → 零件結合 → VC-3 點膠 → 膠量檢查 → 輸送帶烘乾＆壓合 → 成品；NG 件全數入 NG 桶。",
+    "version": "2.0.0",
+    "author": "Howard",
+    "created_at": "2026-05-13",
+    "updated_at": "2026-05-13",
+    "ontology_ref": "learning-map/v2",
+    "resources_ref": "resources.json",
+    "entry": "part_check"
+  },
+  "nodes": {
+    "part_check": {
+      "core": {
+        "name": "進料檢查",
+        "name_en": "Part Check",
+        "type": "action",
+        "feynman": "像「上菜前先檢查食材」——零件外觀規格不對就不准入線。",
+        "tags": ["流程", "START"]
+      },
+      "detail": {
+        "detail": "新批號零件進線前先目視 + 量測，確認與工單一致再倒入震動桶。",
+        "actions": [
+          "核對零件批號與工單。",
+          "目視抽檢外觀、毛邊、尺寸。"
+        ],
+        "common_confusion": "誤以為供應商保證良率就可省略；混料一次整批報廢。",
+        "checkpoints": [
+          "首件量測 OK。",
+          "批號標籤與工單一致。"
+        ]
+      },
+      "extra": {
+        "tips": "首件不過就停線，別硬上。"
+      }
+    },
+    "vibration_bowl": {
+      "core": {
+        "name": "震動桶入料",
+        "name_en": "Feed Part",
+        "type": "tool",
+        "feynman": "像「排隊輸送帶」——靠震動把亂跳的零件排成同一方向。",
+        "tags": ["流程", "供料"]
+      },
+      "detail": {
+        "detail": "透過振幅與軌道角度將零件方向排好供手臂抓取。",
+        "actions": [
+          "倒料前清除桶底切屑。",
+          "依規格調整震動頻率。"
+        ],
+        "common_confusion": "頻率調太高反而把零件震飛或堵料。",
+        "checkpoints": [
+          "出料口零件方向一致。",
+          "桶內無雙料堆疊。"
+        ]
+      },
+      "extra": {
+        "examples": "新料倒入後先空轉 30 秒，讓零件自然排齊再啟動程式。"
+      }
+    },
+    "muffler": {
+      "core": {
+        "name": "消音器",
+        "name_en": "Muffler",
+        "type": "concept",
+        "feynman": "像漢堡裡的「肉」——把直噴氣流打散、降速再排出，所以噪音變小。",
+        "tags": ["主件"]
+      },
+      "detail": {
+        "detail": "金屬燒結件，內部多孔讓高壓氣體分散後排放。",
+        "actions": [
+          "檢查表面無變形或缺角。",
+          "確認方向後放入震動桶。"
+        ],
+        "common_confusion": "誤以為消音器只是「擋住氣」，其實是「分散氣」。",
+        "checkpoints": [
+          "外觀無毛邊。",
+          "重量符合規格。"
+        ],
+        "resources": ["res_001#c1"]
+      },
+      "extra": {
+        "definition": "用於把高速直噴氣流轉成分散、減速、再排出的金屬零件。"
+      }
+    },
+    "retainer_plug": {
+      "core": {
+        "name": "塞子",
+        "name_en": "Retainer Plug",
+        "type": "concept",
+        "feynman": "像漢堡裡的「麵包」——是消音器要塞進去的底座，承擔組裝定位。",
+        "tags": ["主件"]
+      },
+      "detail": {
+        "detail": "帶內螺紋的金屬塞，消音器塗膠後壓入此件完成組裝。",
+        "actions": [
+          "檢查螺紋無破損。",
+          "確認螺紋孔潔淨無切屑。"
+        ],
+        "common_confusion": "誤把退料用的塞子當成主件塞子，混料造成不良。",
+        "checkpoints": [
+          "螺紋根部乾淨。",
+          "規格與工單一致。"
+        ]
+      },
+      "extra": {
+        "tips": "若孔內殘膠未清，下批壓合會偏位。"
+      }
+    },
+    "nachi_robot": {
+      "core": {
+        "name": "NACHI 機械手臂",
+        "name_en": "NACHI Robot Arm",
+        "type": "tool",
+        "feynman": "像工廠裡的「全能外送員」——抓零件、塗膠、放定位一條龍。",
+        "tags": ["核心設備"]
+      },
+      "detail": {
+        "detail": "六軸工業機器手臂，負責搬運消音器、組合塞子，並帶點膠針頭執行塗膠。",
+        "actions": [
+          "開機前確認示教器無報警。",
+          "每週檢查各軸潤滑與背隙。"
+        ],
+        "common_confusion": "以為手臂沒動就是程式問題；其實多半卡在感測器訊號未綠燈。",
+        "checkpoints": [
+          "原點復歸成功。",
+          "三色燈呈綠燈穩定運作。"
+        ],
+        "resources": ["res_001#c3"]
+      },
+      "extra": {
+        "tips": "報警先看示教器訊息再決定是否手動排除。"
+      }
+    },
+    "parts_assembly": {
+      "core": {
+        "name": "零件結合",
+        "name_en": "Parts Assembly",
+        "type": "action",
+        "feynman": "像「夾肉進麵包」——機械手臂把消音器先放到塞子上組合。",
+        "tags": ["流程", "決策點"]
+      },
+      "detail": {
+        "detail": "手臂依程式把消音器與塞子初步結合定位，OK 才往點膠站，NG 進 NG 桶。",
+        "actions": [
+          "確認手臂夾爪與治具對位。",
+          "觀察感測器確認結合到位。"
+        ],
+        "common_confusion": "誤以為「夾到就算結合」；位置偏移會被視覺判 NG。",
+        "checkpoints": [
+          "感測器顯示結合到位。",
+          "無重複/缺件報警。"
+        ]
+      },
+      "extra": {
+        "definition": "點膠前的初步組合與位置確認步驟，是 NG 第一道分流點。"
+      }
+    },
+    "dispense_needle": {
+      "core": {
+        "name": "VC-3 點膠",
+        "name_en": "VC-3 Dispensing",
+        "type": "tool",
+        "feynman": "像「擠美乃滋的細嘴瓶」——對準螺紋中心擠出剛好的量。",
+        "tags": ["流程", "耗材"]
+      },
+      "detail": {
+        "detail": "點膠針頭對準螺紋根部擠出 VC-3 膠水；針頭每日需清潔避免堵塞。",
+        "actions": [
+          "下班前用清針或更換新針。",
+          "對中校正後再啟動連續生產。"
+        ],
+        "common_confusion": "有噴膠就以為 OK；其實位置偏、膠量不均都會被視覺判 NG。",
+        "checkpoints": [
+          "針頭無乾涸殘膠。",
+          "中心對位點落在螺紋圓心。"
+        ],
+        "resources": ["res_001#c5"]
+      },
+      "extra": {
+        "misconception": "省略每日清針隔天就會塞死。"
+      }
+    },
+    "vc3_glue": {
+      "core": {
+        "name": "VC-3 膠水",
+        "name_en": "VC-3 Adhesive",
+        "type": "tool",
+        "feynman": "像漢堡裡的「美乃滋」——一抹下去把肉跟麵包永久黏合。",
+        "tags": ["耗材"]
+      },
+      "detail": {
+        "detail": "厭氧型螺紋膠，需與甲苯按比例稀釋才能流動順暢。",
+        "actions": [
+          "膠桶存量隨時維持 10% 以上。",
+          "稀釋後搖晃均勻再上機。"
+        ],
+        "common_confusion": "誤以為越濃越黏越好；濃度過高反而難流入螺紋根部。",
+        "checkpoints": [
+          "膠桶開封日期 <90 天。",
+          "稀釋後膠色一致。"
+        ],
+        "resources": ["res_001#c4"]
+      },
+      "extra": {
+        "misconception": "高濃度=高強度。實際上需要正確稀釋讓膠水滲入螺紋根部填充率達 75%。"
+      }
+    },
+    "dilution_ratio": {
+      "core": {
+        "name": "稀釋比例",
+        "name_en": "Dilution Ratio",
+        "type": "tool",
+        "feynman": "像調醬料——10 份美乃滋配 0.3 份水才會剛好順口。",
+        "tags": ["參數"]
+      },
+      "detail": {
+        "detail": "VC-3:甲苯 = 10:0.3 (約 3%)，提升流動性並縮短乾燥時間。",
+        "actions": [
+          "精準量取 3% 甲苯加入主膠。",
+          "稀釋後靜置 5 分鐘排氣泡再上機。"
+        ],
+        "common_confusion": "目測加甲苯導致濃度漂移。",
+        "checkpoints": [
+          "稀釋比例紀錄已簽核。",
+          "流動性試滴呈連續滴狀。"
+        ]
+      },
+      "extra": {
+        "tips": "甲苯易揮發，稀釋後 4 小時內用完最佳。"
+      }
+    },
+    "sensor": {
+      "core": {
+        "name": "膠量檢查 (感測器)",
+        "name_en": "Glue Quantity Check",
+        "type": "tool",
+        "feynman": "像「機器的眼睛」——隨時看膠量塗夠沒、有沒有達標。",
+        "tags": ["流程", "檢測", "決策點"]
+      },
+      "detail": {
+        "detail": "視覺感測器拍照分析螺紋根部膠量覆蓋面積，判斷 OK 或 NG。",
+        "actions": [
+          "每班次以無塵布擦拭鏡面。",
+          "確認支架未受撞擊位移。"
+        ],
+        "common_confusion": "燈號異常就以為感測器壞了；多半只是鏡面有灰塵。",
+        "checkpoints": [
+          "有料顯示綠燈、無料顯示紅燈。",
+          "鏡面無油污或粉塵。"
+        ]
+      },
+      "extra": {
+        "misconception": "感測器很少真壞，先清潔再判斷。"
+      }
+    },
+    "fill_rate_75": {
+      "core": {
+        "name": "膠量填充率 75%",
+        "name_en": "Fill Rate ≥75%",
+        "type": "action",
+        "feynman": "像「漢堡醬料蓋得夠不夠滿」——超過 3/4 才算合格。",
+        "tags": ["品質", "規格"]
+      },
+      "detail": {
+        "detail": "螺紋根部填充率須 ≥ 75%，最小覆蓋面積 5.0，由視覺感測器即時檢核。",
+        "actions": [
+          "視覺結果未達 75% 立即停機檢查針頭。",
+          "每班抽樣破壞測試確認膠強度。"
+        ],
+        "common_confusion": "膠看起來多就以為合格；視覺看的是「面積」不是「體積」。",
+        "checkpoints": [
+          "面積數值 ≥ 5.0。",
+          "覆蓋率 ≥ 75% 連續 10 件。"
+        ],
+        "resources": ["res_001#c2"]
+      },
+      "extra": {
+        "definition": "螺紋根部膠水覆蓋面積 ≥ 5.0 且覆蓋率 ≥ 75% 的品質允收標準。"
+      }
+    },
+    "press_cylinder": {
+      "core": {
+        "name": "輸送帶烘乾＆壓合區",
+        "name_en": "Conveyor / Drying / Press",
+        "type": "tool",
+        "feynman": "像最後「壓實 + 烤一下」——把消音器壓進塞子並烘到膠固化。",
+        "tags": ["流程", "核心設備"]
+      },
+      "detail": {
+        "detail": "輸送帶帶動工件進入烘乾區固化 VC-3，再由壓合氣缸 (0.5~0.6 MPa) 壓入塞子完成組裝。",
+        "actions": [
+          "確認氣壓表落在 0.5 ~ 0.6 MPa。",
+          "壓合行程到位後檢查無翹起。"
+        ],
+        "common_confusion": "壓力越大越好；過壓會把消音器壓變形。",
+        "checkpoints": [
+          "氣壓在規範區間。",
+          "壓合後高度量測一致。"
+        ]
+      },
+      "extra": {
+        "definition": "整合輸送帶、烘乾、壓合三段功能的最終組裝站。"
+      }
+    },
+    "ng_bin_assembly": {
+      "core": {
+        "name": "NG 桶 (結合)",
+        "name_en": "NG Bin · Assembly",
+        "type": "risk",
+        "feynman": "像「組裝站旁的淘汰盒」——結合失敗的件直接丟這裡。",
+        "tags": ["品質", "失敗路徑"]
+      },
+      "detail": {
+        "detail": "零件結合 NG 的工件入此桶，原因多為位置偏移、缺件或重複夾取。",
+        "actions": [
+          "每班結束記錄結合 NG 數量。",
+          "連續 ≥3 件結合 NG 立即停線檢查治具。"
+        ],
+        "common_confusion": "把結合 NG 件再投回震動桶；應隔離分析後報廢。",
+        "checkpoints": [
+          "NG 桶與結合站相鄰且醒目。",
+          "當班結合 NG 紀錄表已簽核。"
+        ]
+      },
+      "extra": {
+        "tips": "結合 NG 上升通常是治具磨耗或手臂偏移的先兆。"
+      }
+    },
+    "ng_bin_glue": {
+      "core": {
+        "name": "NG 桶 (膠量)",
+        "name_en": "NG Bin · Glue",
+        "type": "risk",
+        "feynman": "像「點膠站旁的淘汰盒」——膠量不達標的件丟這裡。",
+        "tags": ["品質", "失敗路徑"]
+      },
+      "detail": {
+        "detail": "膠量檢查未達 75% 填充率的工件入此桶，原因多為針頭堵塞、對位偏移或膠水稀釋失準。",
+        "actions": [
+          "每班結束記錄膠量 NG 數量。",
+          "連續 ≥3 件膠量 NG 立即清針或重稀釋膠水。"
+        ],
+        "common_confusion": "膠量不足只是「再補一點就好」；實際膠已乾化必須整件報廢。",
+        "checkpoints": [
+          "NG 桶與感測站相鄰且醒目。",
+          "當班膠量 NG 紀錄表已簽核。"
+        ]
+      },
+      "extra": {
+        "tips": "膠量 NG 上升通常是針頭、感測器或稀釋比例其一出狀況。"
+      }
+    },
+    "safety_stop": {
+      "core": {
+        "name": "緊急停止",
+        "name_en": "Emergency Stop",
+        "type": "risk",
+        "feynman": "像「拔總電源」——一拍下去整台立刻停，是最後防線。",
+        "tags": ["安全", "高風險"]
+      },
+      "detail": {
+        "detail": "嚴禁自動運轉時將手或工具探入工作區；維修須先按 E-STOP 或切手動。",
+        "actions": [
+          "進機械範圍前先按 EMERGENCY STOP。",
+          "復歸前確認所有人員退出安全區。"
+        ],
+        "common_confusion": "以為門關上就安全；異物或感測髒污也可能讓系統誤啟動。",
+        "checkpoints": [
+          "E-STOP 已按下且燈號顯示鎖定。",
+          "鑰匙切換至手動模式。"
+        ],
+        "resources": ["res_001#c6"]
+      },
+      "extra": {
+        "misconception": "急停按下不會壞機；不按才會傷人。"
+      }
+    },
+    "finished_product": {
+      "core": {
+        "name": "成品 (END)",
+        "name_en": "Finished Assembly",
+        "type": "output",
+        "feynman": "像端上桌的漢堡——肉、麵包、醬料一次到位就完成。",
+        "tags": ["產出", "END"]
+      },
+      "detail": {
+        "detail": "Muffler 完全壓入 Retainer Plug 且 VC-3 螺紋填充率 ≥ 75% 的合格件。",
+        "actions": [
+          "外觀目視無膠溢出或翹起。",
+          "依抽樣計畫做拉力或扭力測試。"
+        ],
+        "common_confusion": "壓進去就合格；其實還要看膠量與高度。",
+        "checkpoints": [
+          "壓合高度落在公差內。",
+          "視覺判定 PASS。"
+        ]
+      },
+      "extra": {
+        "definition": "通過視覺檢核與壓合高度量測的可出貨組裝件。"
+      }
+    }
+  },
+  "edges": [
+    { "from": "part_check",      "to": "vibration_bowl",   "type": "depends_on", "label": "OK 後入料",    "weight": 0.95 },
+    { "from": "vibration_bowl",  "to": "muffler",          "type": "depends_on", "label": "排向供料",     "weight": 0.8 },
+    { "from": "vibration_bowl",  "to": "retainer_plug",    "type": "depends_on", "label": "排向供料",     "weight": 0.8 },
+    { "from": "muffler",         "to": "parts_assembly",   "type": "depends_on", "label": "供肉",         "weight": 0.85 },
+    { "from": "retainer_plug",   "to": "parts_assembly",   "type": "depends_on", "label": "供麵包",       "weight": 0.85 },
+    { "from": "nachi_robot",     "to": "parts_assembly",   "type": "depends_on", "label": "手臂執行結合", "weight": 0.9 },
+    { "from": "parts_assembly",  "to": "dispense_needle",  "type": "depends_on", "label": "OK 後點膠",    "weight": 0.95 },
+    { "from": "parts_assembly",  "to": "ng_bin_assembly",  "type": "influences", "label": "結合 NG 入桶", "weight": 0.6 },
+    { "from": "dispense_needle", "to": "vc3_glue",         "type": "depends_on", "label": "輸送膠水",     "weight": 0.8 },
+    { "from": "vc3_glue",        "to": "dilution_ratio",   "type": "influences", "label": "需 3% 稀釋",   "weight": 0.7 },
+    { "from": "dispense_needle", "to": "sensor",           "type": "depends_on", "label": "送入檢核",     "weight": 0.9 },
+    { "from": "sensor",          "to": "fill_rate_75",     "type": "validates",  "label": "判定 ≥75%",    "weight": 0.95 },
+    { "from": "fill_rate_75",    "to": "press_cylinder",   "type": "depends_on", "label": "OK 進壓合",    "weight": 0.95 },
+    { "from": "fill_rate_75",    "to": "ng_bin_glue",      "type": "influences", "label": "未達標入桶",   "weight": 0.6 },
+    { "from": "press_cylinder",  "to": "finished_product", "type": "depends_on", "label": "壓合烘乾完成", "weight": 0.95 },
+    { "from": "safety_stop",     "to": "nachi_robot",      "type": "blocks",     "label": "急停斷電",     "weight": 0.95 }
+  ],
+  "trails": [
+    {
+      "name": "RPM005 官方流程",
+      "intent": "依官方 Flow Chart 走完一遍：進料 → 入料 → 結合 → 點膠 → 檢查 → 壓合 → 成品。",
+      "audience": "現場作業員",
+      "estimated_hours": 2,
+      "success_criteria": "能不看資料說出 7 個主節點與兩個 NG 分流點。",
+      "steps": [
+        { "node": "part_check",       "prerequisite": [],                  "next": ["vibration_bowl"],   "blockers": [] },
+        { "node": "vibration_bowl",   "prerequisite": ["part_check"],      "next": ["parts_assembly"],   "blockers": [] },
+        { "node": "parts_assembly",   "prerequisite": ["vibration_bowl"],  "next": ["dispense_needle"],  "blockers": ["ng_bin_assembly"] },
+        { "node": "dispense_needle",  "prerequisite": ["parts_assembly"],  "next": ["sensor"],           "blockers": [] },
+        { "node": "sensor",           "prerequisite": ["dispense_needle"], "next": ["fill_rate_75"],     "blockers": [] },
+        { "node": "fill_rate_75",     "prerequisite": ["sensor"],          "next": ["press_cylinder"],   "blockers": ["ng_bin_glue"] },
+        { "node": "press_cylinder",   "prerequisite": ["fill_rate_75"],    "next": ["finished_product"], "blockers": [] },
+        { "node": "finished_product", "prerequisite": ["press_cylinder"],  "next": [],                   "blockers": [] }
+      ]
+    },
+    {
+      "name": "故障排除與設備維護",
+      "intent": "能自行處理常見報警並進行定期保養。",
+      "audience": "設備維修員",
+      "estimated_hours": 4,
+      "success_criteria": "能看懂 I/O 表並排除感測器與供料系統故障。",
+      "steps": [
+        { "node": "press_cylinder", "prerequisite": [],                 "next": ["sensor"],         "blockers": [] },
+        { "node": "sensor",         "prerequisite": ["press_cylinder"], "next": ["dispense_needle"],"blockers": [] },
+        { "node": "dispense_needle","prerequisite": ["sensor"],         "next": ["vibration_bowl"], "blockers": [] },
+        { "node": "vibration_bowl", "prerequisite": ["dispense_needle"],"next": [],                 "blockers": [] }
+      ]
+    }
+  ]
+}
+,
+  "ontology": {
+  "schema": "ontology/v1",
+  "version": "1.0.0",
+  "description": "知識圖譜的語意憲法：定義 node 與 edge 的語意分類與規則。完全不含視覺屬性。",
+  "node_types": [
+    {
+      "id": "concept",
+      "label": "概念",
+      "semantic": "穩定與結構：抽象知識、定義、心智模型。"
+    },
+    {
+      "id": "action",
+      "label": "操作",
+      "semantic": "動能與執行：可被使用者實際採取的步驟或行動。"
+    },
+    {
+      "id": "tool",
+      "label": "工具",
+      "semantic": "輔助與手段：完成 action 所需的工具、平台或服務。"
+    },
+    {
+      "id": "risk",
+      "label": "風險",
+      "semantic": "警示與阻斷：可能造成失敗、損失或卡關的點。"
+    },
+    {
+      "id": "output",
+      "label": "結果",
+      "semantic": "收斂與價值：最終產出、里程碑或交付物。"
+    }
+  ],
+  "edge_types": [
+    {
+      "id": "foundation",
+      "semantic": "基礎（必須先懂才能往下）",
+      "transitive": true,
+      "acyclic": true
+    },
+    {
+      "id": "depends_on",
+      "semantic": "依賴（順序上需要前者）",
+      "transitive": true,
+      "acyclic": true
+    },
+    {
+      "id": "influences",
+      "semantic": "影響（相關但非強制）",
+      "transitive": false,
+      "acyclic": false
+    },
+    {
+      "id": "extends",
+      "semantic": "延伸（深化或變體）",
+      "transitive": true,
+      "acyclic": true
+    },
+    {
+      "id": "contains",
+      "semantic": "包含（父子結構）",
+      "transitive": true,
+      "acyclic": true
+    },
+    {
+      "id": "blocks",
+      "semantic": "阻礙（卡點、反例、互斥）",
+      "transitive": false,
+      "acyclic": false
+    },
+    {
+      "id": "validates",
+      "semantic": "驗證（檢核、測試、回饋）",
+      "transitive": false,
+      "acyclic": false
+    }
+  ],
+  "rules": [
+    "foundation 邊集合必須形成 DAG（無環）。",
+    "depends_on 邊集合必須形成 DAG（無環）。",
+    "risk 類型節點不可作為整張圖的 meta.entry（但可作為 trail 內 step 起點，例如風險控管路徑）。",
+    "blocks 邊不可指向 output 類型節點。",
+    "每個 trail step 必須引用存在於 nodes 中的 id。",
+    "[v2 SINGLE-EDGE] 同一對 (from, to) 之間最多只能有一條邊。若有多重語意，選最主導者，次要語意改用 trail.blockers / node.tags 表達。"
+  ],
+  "roadmap": {
+    "v2": "Single-edge mode. (from, to) is unique. Dominant-semantic-wins.",
+    "v3": "Multi-relation mode. edge.type → edge.relations[] = [{type, label, weight}]. Migration: each v2 edge becomes a relations[] with one element. Renderer groups multi-relation edges visually (e.g. parallel curves)."
+  }
+}
+,
+  "resources": {
+  "schema": "resources/v1",
+  "version": "1.0.0",
+  "graph_id": "mac_muffler_assembly",
+  "resources": [
+    {
+      "id": "res_001",
+      "type": "pdf",
+      "title": "Pp-313-MVT-RPM005 消音器自動組裝機作業指導書",
+      "url": "internal://Pp-313-MVT-RPM005",
+      "author": "MAC Valves 製造部",
+      "accessed_at": "2026-05-13",
+      "chunks": [
+        { "id": "c1", "text": "把『高速直噴的氣』變成『分散、減速、再排出』。",                                "timestamp": "品質要求" },
+        { "id": "c2", "text": "螺紋根部填充率至少 75%，最小面積為 5.0。",                                  "timestamp": "品質要求" },
+        { "id": "c3", "text": "同時按 ENABLE+SHIFT+GO，跳出的訊息選擇『可行』。",                            "timestamp": "啟動" },
+        { "id": "c4", "text": "VC-3 與甲苯依 10:0.3 比例稀釋，膠桶存量維持 10% 以上。",                      "timestamp": "膠水管理" },
+        { "id": "c5", "text": "針頭無乾涸殘膠，位置對準螺紋中心。",                                          "timestamp": "啟動前確認事項" },
+        { "id": "c6", "text": "嚴禁在設備自動運轉狀態下，將手或任何工具探入機器工作範圍內。",              "timestamp": "安全注意事項" }
+      ]
+    },
+    {
+      "id": "res_002",
+      "type": "notebook_lm",
+      "title": "現場保養口述紀錄",
+      "url": "internal://shopfloor-notes",
+      "author": "現場領班",
+      "accessed_at": "2026-05-13",
+      "chunks": [
+        { "id": "c1", "text": "不清針頭明天就塞死了；不清過濾網就像清冷氣濾網一樣，不清它就吸不進空氣。", "timestamp": "5. 保養" }
+      ]
+    }
+  ]
+}
+,
+  "progress": null
+}
+</script>
+
+<script>
+// ============================================================
+// Visual encoding (redundant: hue × shape × border)
+// ============================================================
+const NODE_TYPE_VIS = {
+  concept: { color: 'var(--n-concept)', shape: 'circle',    label: '概念', semantic: '穩定/結構' },
+  action:  { color: 'var(--n-action)',  shape: 'diamond',   label: '操作', semantic: '判斷/執行' },
+  tool:    { color: 'var(--n-tool)',    shape: 'hexagon',   label: '工具', semantic: '輔助/手段' },
+  risk:    { color: 'var(--n-risk)',    shape: 'octagon',   label: '風險', semantic: '警示/阻斷' },
+  output:  { color: 'var(--n-output)',  shape: 'rectangle', label: '結果', semantic: '收斂/價值' },
+};
+
+const EDGE_TYPE_VIS = {
+  foundation: { color: 'var(--e-foundation)', dash: null,        label: '基礎' },
+  depends_on: { color: 'var(--e-depends_on)', dash: null,        label: '依賴' },
+  influences: { color: 'var(--e-influences)', dash: '4,4',       label: '影響' },
+  extends:    { color: 'var(--e-extends)',    dash: null,        label: '延伸' },
+  contains:   { color: 'var(--e-contains)',   dash: null,        label: '包含' },
+  blocks:     { color: 'var(--e-blocks)',     dash: '6,3',       label: '阻礙' },
+  validates:  { color: 'var(--e-validates)',  dash: '2,3',       label: '驗證' },
+};
+
+// Shape path generators centered at (0,0). r = "radius" hint.
+const SHAPE_PATH = {
+  circle:    (r) => `M${-r},0 a${r},${r} 0 1,0 ${2*r},0 a${r},${r} 0 1,0 ${-2*r},0 Z`,
+  diamond:   (r) => `M0,${-r*1.15} L${r*1.05},0 L0,${r*1.15} L${-r*1.05},0 Z`,
+  hexagon:   (r) => {
+    const s = r * 1.05; const h = s * 0.866;
+    return `M${-s/2},${-h} L${s/2},${-h} L${s},0 L${s/2},${h} L${-s/2},${h} L${-s},0 Z`;
+  },
+  octagon:   (r) => {
+    const s = r * 0.95, a = s * 0.414;
+    return `M${-a},${-s} L${a},${-s} L${s},${-a} L${s},${a} L${a},${s} L${-a},${s} L${-s},${a} L${-s},${-a} Z`;
+  },
+  rectangle: (r) => {
+    const w = r * 1.4, h = r * 0.95, rx = 6;
+    return `M${-w+rx},${-h} h${2*(w-rx)} a${rx},${rx} 0 0 1 ${rx},${rx} v${2*(h-rx)} a${rx},${rx} 0 0 1 ${-rx},${rx} h${-2*(w-rx)} a${rx},${rx} 0 0 1 ${-rx},${-rx} v${-2*(h-rx)} a${rx},${rx} 0 0 1 ${rx},${-rx} Z`;
+  },
+};
+
+const NODE_R = 28;
+
+// ============================================================
+// Bootstrap
+// ============================================================
+const STATE = {
+  graph: null,
+  ontology: null,
+  resources: null,
+  progress: null,
+  selectedNode: null,
+  selectedTrail: null,
+  sim: null,
+  simPaused: false,
+  ringsVisible: true,
+};
+
+const STATUS_LABELS = {
+  not_started: '未開始',
+  in_progress: '進行中',
+  completed:   '完成',
+  stuck:       '卡關',
+};
+const STATUS_COLORS = {
+  completed:   'var(--green)',
+  in_progress: 'var(--blue)',
+  stuck:       'var(--red)',
+};
+
+function progressKey() { return `nobooktomap_progress_${STATE.graph.meta.id}`; }
+
+function loadStoredProgress(inline) {
+  try {
+    const raw = localStorage.getItem(`nobooktomap_progress_${inline?.graph_id || STATE.graph?.meta?.id}`);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return inline;
+}
+
+function saveProgress() {
+  if (!STATE.progress || !STATE.graph) return;
+  STATE.progress.updated_at = new Date().toISOString().slice(0, 10);
+  try { localStorage.setItem(progressKey(), JSON.stringify(STATE.progress, null, 2)); } catch {}
+}
+
+function setNodeStatus(nodeId, status) {
+  if (!STATE.progress) {
+    STATE.progress = {
+      schema: 'progress/v1',
+      graph_id: STATE.graph.meta.id,
+      nodes: {},
+      trails: {},
+    };
+  }
+  STATE.progress.nodes = STATE.progress.nodes || {};
+  const prev = STATE.progress.nodes[nodeId] || {};
+  STATE.progress.nodes[nodeId] = {
+    ...prev,
+    status,
+    last_touched: new Date().toISOString().slice(0, 10),
+  };
+  saveProgress();
+  refreshNodeRing(nodeId, status);
+  if (STATE.selectedNode?.id === nodeId) {
+    STATE.selectedNode.status = status;
+    renderDetail(STATE.selectedNode);
+  }
+  updateProgress();
+  renderTrailStepper();
+}
+
+function refreshNodeRing(nodeId, status) {
+  const svg = d3.select('#graph');
+  const g = svg.selectAll('g.node').filter(d => d.id === nodeId);
+  g.select('circle.status-ring').remove();
+  g.datum().status = status;
+  if (status === 'completed' || status === 'in_progress' || status === 'stuck') {
+    g.insert('circle', '.node-shape')
+      .attr('class', 'status-ring')
+      .attr('r', NODE_R + 5)
+      .attr('fill', 'none')
+      .attr('stroke', STATUS_COLORS[status])
+      .attr('stroke-width', 2)
+      .attr('stroke-dasharray', status === 'in_progress' ? '3,3' : null)
+      .attr('opacity', 0.7)
+      .style('display', STATE.ringsVisible ? null : 'none');
+  }
+}
+
+function toggleRings() {
+  STATE.ringsVisible = !STATE.ringsVisible;
+  d3.select('#graph').selectAll('circle.status-ring')
+    .style('display', STATE.ringsVisible ? null : 'none');
+  document.getElementById('btn-rings').classList.toggle('active', STATE.ringsVisible);
+}
+
+// Single-file mode: data embedded inline (see <script id="lm-data"> at bottom of body).
+// To update data: edit corresponding .json file, then paste back into the inline block.
+(function init() {
+  try {
+    const raw = document.getElementById('lm-data').textContent;
+    const data = JSON.parse(raw);
+    STATE.graph     = data.graph;
+    STATE.ontology  = data.ontology;
+    STATE.resources = data.resources;
+    STATE.progress  = loadStoredProgress(data.progress || null);
+    renderAll();
+    // P1: fade out loading splash after first paint (with small intentional delay so it's perceivable)
+    setTimeout(() => {
+      const splash = document.getElementById('loading-splash');
+      if (splash) splash.classList.add('hidden');
+    }, 250);
+  } catch (err) {
+    showError(err);
+  }
+})();
+
+function showError(err) {
+  document.getElementById('error-banner').style.display = 'flex';
+  document.getElementById('error-detail').textContent = String(err);
+  document.getElementById('map-status').textContent = '載入失敗';
+}
+
+// ============================================================
+// Render
+// ============================================================
+function renderAll() {
+  renderHeader();
+  renderTrails();
+  renderLegend();
+  renderGraph();
+  updateProgress();
+}
+
+function renderHeader() {
+  document.getElementById('title').textContent   = STATE.graph.meta.title;
+  document.getElementById('summary').textContent = STATE.graph.meta.summary || '';
+}
+
+function renderTrails() {
+  const root = document.getElementById('trail-list');
+  root.innerHTML = '';
+  STATE.graph.trails.forEach(trail => {
+    const btn = document.createElement('button');
+    btn.className = 'trail-button';
+    btn.innerHTML = `<strong>${escapeHTML(trail.name)}</strong><span>${escapeHTML(trail.intent)}</span>`;
+    btn.addEventListener('click', () => selectTrail(trail));
+    root.appendChild(btn);
+  });
+}
+
+function renderLegend() {
+  // Nodes
+  const nodes = document.getElementById('legend-nodes');
+  nodes.innerHTML = '';
+  Object.entries(NODE_TYPE_VIS).forEach(([type, vis]) => {
+    const row = document.createElement('div');
+    row.className = 'legend-item';
+    row.innerHTML = `
+      <span class="legend-swatch">
+        <svg viewBox="-16 -16 32 32">
+          <path d="${SHAPE_PATH[vis.shape](12)}" fill="${vis.color}" opacity="0.85"
+                stroke="${vis.color}" stroke-width="${type==='risk'?3:1.5}"/>
+        </svg>
+      </span>
+      <span><strong style="color:var(--text);">${vis.label}</strong> · ${vis.semantic}</span>
+    `;
+    nodes.appendChild(row);
+  });
+  // Edges
+  const edges = document.getElementById('legend-edges');
+  edges.innerHTML = '';
+  Object.entries(EDGE_TYPE_VIS).forEach(([type, vis]) => {
+    const row = document.createElement('div');
+    row.className = 'legend-item';
+    row.innerHTML = `
+      <span class="legend-swatch">
+        <svg viewBox="0 0 24 12">
+          <line x1="2" y1="6" x2="22" y2="6"
+                stroke="${vis.color}" stroke-width="2"
+                ${vis.dash ? `stroke-dasharray="${vis.dash}"` : ''}/>
+        </svg>
+      </span>
+      <span>${vis.label} <span style="color:var(--muted);">(${type})</span></span>
+    `;
+    edges.appendChild(row);
+  });
+}
+
+// ============================================================
+// Graph rendering (D3 force layout)
+// ============================================================
+function renderGraph() {
+  const svg = d3.select('#graph');
+  svg.selectAll('*').remove();
+  const { width, height } = svg.node().getBoundingClientRect();
+
+  // Marker defs (arrowheads per edge type)
+  const defs = svg.append('defs');
+  Object.entries(EDGE_TYPE_VIS).forEach(([type, vis]) => {
+    defs.append('marker')
+      .attr('id', `arrow-${type}`)
+      .attr('viewBox', '0 -5 10 10')
+      .attr('refX', 14)
+      .attr('refY', 0)
+      .attr('markerWidth', 7)
+      .attr('markerHeight', 7)
+      .attr('orient', 'auto')
+      .append('path')
+        .attr('d', 'M0,-5L10,0L0,5')
+        .attr('fill', vis.color);
+  });
+
+  // Zoomable group
+  const root = svg.append('g').attr('class', 'root');
+  const zoom = d3.zoom()
+    .scaleExtent([0.3, 3])
+    .on('zoom', (e) => root.attr('transform', e.transform));
+  svg.call(zoom);
+
+  // Prepare data
+  const nodes = Object.entries(STATE.graph.nodes).map(([id, n]) => ({
+    id,
+    ...n.core,
+    detail: n.detail,
+    extra: n.extra,
+    status: STATE.progress?.nodes?.[id]?.status || 'not_started',
+  }));
+  // D3 forceLink expects `source`/`target`; our schema uses `from`/`to`. Bridge here.
+  const edges = STATE.graph.edges.map(e => ({ ...e, source: e.from, target: e.to }));
+
+  // Force simulation
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(edges).id(d => d.id).distance(d => 130 - (d.weight ?? 0.5) * 30).strength(d => 0.3 + (d.weight ?? 0.5) * 0.5))
+    .force('charge', d3.forceManyBody().strength(-450))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collide', d3.forceCollide(NODE_R + 12));
+  STATE.sim = sim;
+
+  // Edges
+  const edgeSel = root.append('g').attr('class', 'edges')
+    .selectAll('path')
+    .data(edges)
+    .join('path')
+      .attr('class', 'edge')
+      .attr('stroke', d => EDGE_TYPE_VIS[d.type].color)
+      .attr('stroke-width', d => 1 + (d.weight ?? 0.5) * 2.5)
+      .attr('stroke-dasharray', d => EDGE_TYPE_VIS[d.type].dash || null)
+      .attr('opacity', d => 0.4 + (d.weight ?? 0.5) * 0.5)
+      .attr('marker-end', d => `url(#arrow-${d.type})`);
+
+  // Edge labels
+  const edgeLabelSel = root.append('g').attr('class', 'edge-labels')
+    .selectAll('text')
+    .data(edges)
+    .join('text')
+      .attr('class', 'edge-label')
+      .text(d => d.label);
+
+  // Nodes (group with shape + label + feynman)
+  const nodeSel = root.append('g').attr('class', 'nodes')
+    .selectAll('g.node')
+    .data(nodes)
+    .join('g')
+      .attr('class', 'node')
+      .call(d3.drag()
+        .on('start', dragStart)
+        .on('drag', dragMove)
+        .on('end', dragEnd))
+      .on('click', (event, d) => { event.stopPropagation(); selectNode(d); });
+
+  nodeSel.append('path')
+    .attr('class', d => `node-shape ${d.type === 'risk' ? 'risk' : ''}`)
+    .attr('d', d => SHAPE_PATH[NODE_TYPE_VIS[d.type].shape](NODE_R))
+    .attr('fill', d => NODE_TYPE_VIS[d.type].color)
+    .attr('fill-opacity', 0.18)
+    .attr('stroke', d => NODE_TYPE_VIS[d.type].color)
+    .attr('color', d => NODE_TYPE_VIS[d.type].color);
+
+  // Status ring overlay
+  nodeSel.filter(d => d.status === 'completed' || d.status === 'in_progress' || d.status === 'stuck')
+    .append('circle')
+      .attr('class', 'status-ring')
+      .attr('r', NODE_R + 5)
+      .attr('fill', 'none')
+      .attr('stroke', d => STATUS_COLORS[d.status])
+      .attr('stroke-width', 2)
+      .attr('stroke-dasharray', d => d.status === 'in_progress' ? '3,3' : null)
+      .attr('opacity', 0.7)
+      .style('display', STATE.ringsVisible ? null : 'none');
+
+  nodeSel.append('text')
+    .attr('class', 'node-label')
+    .each(function(d) {
+      const sel = d3.select(this);
+      if (d.name_en) {
+        sel.append('tspan').attr('x', 0).attr('dy', '-0.1em').text(d.name);
+        sel.append('tspan').attr('class', 'name-en').attr('x', 0).attr('dy', '1.15em').text(d.name_en);
+      } else {
+        sel.append('tspan').attr('x', 0).attr('dy', '0.35em').text(d.name);
+      }
+    });
+
+  // (canvas-level feynman removed — keep canvas clean, full feynman lives in detail panel)
+
+  // Tick
+  sim.on('tick', () => {
+    edgeSel.attr('d', d => curvedPath(d));
+    edgeLabelSel
+      .attr('x', d => (d.source.x + d.target.x) / 2)
+      .attr('y', d => (d.source.y + d.target.y) / 2 - 4);
+    nodeSel.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  function dragStart(event, d) { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
+  function dragMove(event, d)  { d.fx = event.x; d.fy = event.y; }
+  function dragEnd(event, d)   { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }
+
+  // Background click → clear selection
+  svg.on('click', () => clearSelection());
+
+  // Toolbar
+  document.getElementById('btn-zoom-in').onclick  = () => svg.transition().call(zoom.scaleBy, 1.3);
+  document.getElementById('btn-zoom-out').onclick = () => svg.transition().call(zoom.scaleBy, 1/1.3);
+  document.getElementById('btn-fit').onclick      = () => svg.transition().call(zoom.transform, d3.zoomIdentity);
+  document.getElementById('btn-pause').onclick    = togglePause;
+  document.getElementById('btn-rings').onclick    = toggleRings;
+  document.getElementById('btn-clear').onclick    = clearAllSelections;
+
+  document.getElementById('map-status').textContent =
+    `${nodes.length} 節點 · ${edges.length} 邊 · ${STATE.graph.trails.length} 路徑`;
+}
+
+function curvedPath(d) {
+  // gentle arc; offset so two opposing edges don't overlap
+  const dx = d.target.x - d.source.x;
+  const dy = d.target.y - d.source.y;
+  const dr = Math.sqrt(dx*dx + dy*dy) * 1.8;
+  return `M${d.source.x},${d.source.y} A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
+}
+
+function togglePause() {
+  STATE.simPaused = !STATE.simPaused;
+  const btn = document.getElementById('btn-pause');
+  const pauseIcon = btn.querySelector('.icon-pause');
+  const playIcon  = btn.querySelector('.icon-play');
+  if (STATE.simPaused) {
+    STATE.sim.stop();
+    pauseIcon.style.display = 'none';
+    playIcon.style.display  = 'block';
+    btn.title = '解凍布局';
+  } else {
+    STATE.sim.alphaTarget(0.1).restart();
+    pauseIcon.style.display = 'block';
+    playIcon.style.display  = 'none';
+    btn.title = '凍結布局';
+  }
+}
+
+// ============================================================
+// Selection / highlighting
+// ============================================================
+function selectNode(node) {
+  STATE.selectedNode = node;
+  renderDetail(node);
+  applyHighlight();
+  renderTrailStepper();
+}
+
+function selectTrail(trail) {
+  STATE.selectedTrail = (STATE.selectedTrail?.name === trail.name) ? null : trail;
+  document.querySelectorAll('.trail-button').forEach((b, i) => {
+    b.classList.toggle('active', STATE.graph.trails[i] === STATE.selectedTrail);
+  });
+  applyHighlight();
+  updateProgress();
+  renderTrailStepper();
+}
+
+// P2: Trail stepper bar — shows trail step order with arrows; click to focus a node
+function renderTrailStepper() {
+  const stepper = document.getElementById('trail-stepper');
+  if (!STATE.selectedTrail) {
+    stepper.style.display = 'none';
+    stepper.innerHTML = '';
+    return;
+  }
+  const trail = STATE.selectedTrail;
+  const parts = [`<span class="stepper-trail-name">${escapeHTML(trail.name)}</span>`];
+  trail.steps.forEach((s, i) => {
+    const node = STATE.graph.nodes[s.node];
+    if (!node) return;
+    const status = STATE.progress?.nodes?.[s.node]?.status || 'not_started';
+    const isSel = STATE.selectedNode?.id === s.node;
+    const cls = [
+      'stepper-step',
+      isSel ? 'selected' : '',
+      status === 'completed' ? 'completed' : '',
+      status === 'stuck'     ? 'stuck'     : ''
+    ].filter(Boolean).join(' ');
+    parts.push(`
+      <span class="${cls}" data-node-id="${escapeHTML(s.node)}">
+        <span class="step-num">${i + 1}</span>
+        <span>${escapeHTML(node.core.name)}</span>
+      </span>
+    `);
+    if (i < trail.steps.length - 1) parts.push('<span class="step-arrow">→</span>');
+  });
+  stepper.innerHTML = parts.join('');
+  stepper.style.display = 'flex';
+}
+
+function clearSelection() {
+  STATE.selectedNode = null;
+  applyHighlight();
+}
+
+// Full reset: clear node, trail, and detail panel (toolbar ✕ button)
+function clearAllSelections() {
+  STATE.selectedNode = null;
+  STATE.selectedTrail = null;
+  document.querySelectorAll('.trail-button').forEach(b => b.classList.remove('active'));
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-empty">
+      <h2>👈 點擊地圖上的節點查看詳情</h2>
+      <p style="margin-top:12px;">
+        每個節點預設只顯示「名稱 + 比喻 + 類型」，點擊下方折疊區可漸進展開細節與額外補充。
+      </p>
+    </div>`;
+  applyHighlight();
+  updateProgress();
+}
+
+function applyHighlight() {
+  const svg = d3.select('#graph');
+  const trail = STATE.selectedTrail;
+  const sel = STATE.selectedNode;
+
+  // Build "relevant" id set based on selection mode
+  let relevantIds = null;
+  if (trail) {
+    relevantIds = new Set(trail.steps.map(s => s.node));
+  } else if (sel) {
+    // Single-node mode: relevant = selected + direct neighbors (in/out)
+    relevantIds = new Set([sel.id]);
+    STATE.graph.edges.forEach(e => {
+      if (e.from === sel.id) relevantIds.add(e.to);
+      if (e.to   === sel.id) relevantIds.add(e.from);
+    });
+  }
+
+  // Edge endpoints are resolved to node objects by d3.forceLink at runtime;
+  // when no selection is active, nothing is dimmed.
+  svg.selectAll('g.node').each(function(d) {
+    const isSel  = sel && d.id === sel.id;
+    const dimmed = relevantIds ? (!relevantIds.has(d.id) && !isSel) : false;
+    d3.select(this).select('.node-shape')
+      .classed('selected', isSel)
+      .classed('dimmed', dimmed);
+    d3.select(this).select('.node-label').classed('dimmed', dimmed);
+  });
+
+  svg.selectAll('path.edge').each(function(d) {
+    const sid = d.source.id || d.source;
+    const tid = d.target.id || d.target;
+    const dimmed = relevantIds ? !(relevantIds.has(sid) && relevantIds.has(tid)) : false;
+    d3.select(this).classed('dimmed', dimmed);
+  });
+  svg.selectAll('text.edge-label').each(function(d) {
+    const sid = d.source.id || d.source;
+    const tid = d.target.id || d.target;
+    const dimmed = relevantIds ? !(relevantIds.has(sid) && relevantIds.has(tid)) : false;
+    d3.select(this).classed('dimmed', dimmed);
+  });
+}
+
+// ============================================================
+// Detail panel
+// ============================================================
+function renderDetail(node) {
+  const root = document.getElementById('detail');
+  const vis = NODE_TYPE_VIS[node.type];
+  const status = node.status;
+
+  const aliases = (node.aliases || []).map(a => `<span class="tag">${escapeHTML(a)}</span>`).join('');
+  const tags    = (node.tags    || []).map(t => `<span class="tag">#${escapeHTML(t)}</span>`).join('');
+
+  const resources = (node.detail.resources || []).map(rid => {
+    const [resId, chunk] = rid.split('#');
+    const res = STATE.resources?.resources?.find(r => r.id === resId);
+    const title = res ? res.title : resId;
+    return `<span class="resource-chip" title="${escapeHTML(res?.url || '')}">${escapeHTML(title)}${chunk ? ` · ${chunk}` : ''}</span>`;
+  }).join('');
+
+  const extra = node.extra || {};
+  const extraParts = [];
+  if (extra.tips)          extraParts.push(`<div><span class="label">Tips</span><p style="margin-top:6px;">${escapeHTML(extra.tips)}</p></div>`);
+  if (extra.misconception) extraParts.push(`<div style="margin-top:10px;"><span class="label">Misconception</span><p style="margin-top:6px; color:var(--orange);">${escapeHTML(extra.misconception)}</p></div>`);
+  if (extra.definition)    extraParts.push(`<div style="margin-top:10px;"><span class="label">Definition</span><p style="margin-top:6px;">${escapeHTML(extra.definition)}</p></div>`);
+  if (extra.examples)      extraParts.push(`<div style="margin-top:10px;"><span class="label">Examples</span><ul>${extra.examples.map(e => `<li>${escapeHTML(e)}</li>`).join('')}</ul></div>`);
+
+  root.innerHTML = `
+    <span class="node-type-chip" style="color:${vis.color}; background:${vis.color}26;">
+      ${vis.label} · ${escapeHTML(node.type)}
+    </span>
+    <h2>${escapeHTML(node.name)}
+      <span class="status-badge status-${status}">${STATUS_LABELS[status]}</span>
+    </h2>
+    ${node.name_en ? `<div class="detail-name-en">${escapeHTML(node.name_en)}</div>` : ''}
+    ${(aliases || tags) ? `<div class="tags">${aliases}${tags}</div>` : ''}
+
+    <div class="feynman">${escapeHTML(node.feynman)}</div>
+
+    ${node.type === 'risk' ? `
+      <div class="risk-alert">
+        <span class="label">常見誤解 / 風險點</span>
+        ${escapeHTML(node.detail.common_confusion)}
+      </div>
+    ` : ''}
+
+    <div class="status-controls">
+      <span class="label">學習狀態</span>
+      <div class="status-btns" data-node-id="${escapeHTML(node.id)}">
+        <button data-status="not_started" class="${status==='not_started'?'active':''}">未開始</button>
+        <button data-status="in_progress" class="${status==='in_progress'?'active':''}">進行中</button>
+        <button data-status="completed"   class="${status==='completed'  ?'active':''}">完成</button>
+        <button data-status="stuck"       class="${status==='stuck'      ?'active':''}">卡關</button>
+      </div>
+    </div>
+
+    <details open>
+      <summary>Detail · 詳細說明</summary>
+      <div>
+        <p>${escapeHTML(node.detail.detail)}</p>
+
+        <div style="margin-top:14px;"><span class="label">Actions</span>
+          <ul>${node.detail.actions.map(a => `<li>${escapeHTML(a)}</li>`).join('')}</ul>
+        </div>
+
+        <div style="margin-top:14px;"><span class="label">Common Confusion</span>
+          <p class="confusion" style="margin-top:6px;">${escapeHTML(node.detail.common_confusion)}</p>
+        </div>
+
+        <div style="margin-top:14px;"><span class="label">Checkpoints</span>
+          <ul>${node.detail.checkpoints.map(c => `<li>${escapeHTML(c)}</li>`).join('')}</ul>
+        </div>
+
+        ${resources ? `<div style="margin-top:14px;"><span class="label">Resources</span><div class="resources">${resources}</div></div>` : ''}
+      </div>
+    </details>
+
+    ${extraParts.length ? `
+      <details>
+        <summary>Extra · 額外補充</summary>
+        <div>${extraParts.join('')}</div>
+      </details>
+    ` : ''}
+  `;
+}
+
+// ============================================================
+// Progress
+// ============================================================
+function updateProgress() {
+  const block = document.getElementById('progress-block');
+  if (!STATE.progress) { block.style.display = 'none'; return; }
+  block.style.display = 'block';
+
+  let total, done;
+  if (STATE.selectedTrail) {
+    const ids = STATE.selectedTrail.steps.map(s => s.node);
+    total = ids.length;
+    done = ids.filter(id => STATE.progress.nodes?.[id]?.status === 'completed').length;
+    document.getElementById('progress-label').textContent = STATE.selectedTrail.name;
+  } else {
+    const ids = Object.keys(STATE.graph.nodes);
+    total = ids.length;
+    done = ids.filter(id => STATE.progress.nodes?.[id]?.status === 'completed').length;
+    document.getElementById('progress-label').textContent = '整體進度';
+  }
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  document.getElementById('progress-pct').textContent = `${done}/${total} · ${pct}%`;
+  document.getElementById('progress-fill').style.width = pct + '%';
+}
+
+// ============================================================
+// Utils
+// ============================================================
+function escapeHTML(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Detail panel: delegate clicks for status buttons
+document.getElementById('detail').addEventListener('click', (e) => {
+  const btn = e.target.closest('.status-btns button');
+  if (!btn) return;
+  const wrap = btn.closest('.status-btns');
+  const nodeId = wrap?.dataset.nodeId;
+  const status = btn.dataset.status;
+  if (nodeId && status) setNodeStatus(nodeId, status);
+});
+
+// Trail stepper: delegate clicks to focus a node
+document.getElementById('trail-stepper').addEventListener('click', (e) => {
+  const step = e.target.closest('.stepper-step');
+  if (!step) return;
+  const nodeId = step.dataset.nodeId;
+  const nodeData = d3.select('#graph').selectAll('g.node').data().find(d => d.id === nodeId);
+  if (nodeData) selectNode(nodeData);
+});
+
+// Handle resize
+window.addEventListener('resize', () => {
+  if (STATE.graph) renderGraph();
+});
+</script>
+</body>
+</html>
