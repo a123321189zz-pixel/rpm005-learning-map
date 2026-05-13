@@ -1372,40 +1372,14 @@ function renderGraph() {
     .on('zoom', (e) => root.attr('transform', e.transform));
   svg.call(zoom);
 
-  // Fixed initial layout (fraction of canvas width/height)
-  // 成品在最右、進料在最左、NG桶在下方（依參考截圖精確量測）
-  const FIXED_POS = {
-    part_check:       { x: 0.04, y: 0.81 },  // 進料檢查 — 最左
-    vibration_bowl:   { x: 0.14, y: 0.73 },  // 震動桶入料
-    muffler:          { x: 0.23, y: 0.81 },  // 消音器
-    retainer_plug:    { x: 0.29, y: 0.62 },  // 塞子
-    nachi_robot:      { x: 0.30, y: 0.41 },  // NACHI 機械手臂
-    parts_assembly:   { x: 0.39, y: 0.59 },  // 零件結合
-    safety_stop:      { x: 0.22, y: 0.21 },  // 緊急停止
-    dispense_needle:  { x: 0.50, y: 0.53 },  // VC-3 點膠
-    vc3_glue:         { x: 0.48, y: 0.30 },  // VC-3 膠水
-    dilution_ratio:   { x: 0.50, y: 0.06 },  // 稀釋比例 — 最上
-    sensor:           { x: 0.63, y: 0.47 },  // 膠量檢查
-    fill_rate_75:     { x: 0.73, y: 0.42 },  // 膠量填充率 75%
-    press_cylinder:   { x: 0.79, y: 0.28 },  // 輸送帶烘乾＆壓合
-    finished_product: { x: 0.94, y: 0.17 },  // 成品 (END) — 最右
-    ng_bin_assembly:  { x: 0.41, y: 0.81 },  // NG 桶 (結合) — 下方
-    ng_bin_glue:      { x: 0.81, y: 0.59 },  // NG 桶 (膠量) — 下方右
-  };
-
   // Prepare data
-  const nodes = Object.entries(STATE.graph.nodes).map(([id, n]) => {
-    const pos = FIXED_POS[id];
-    return {
-      id,
-      ...n.core,
-      detail: n.detail,
-      extra: n.extra,
-      status: STATE.progress?.nodes?.[id]?.status || 'not_started',
-      fx: pos ? pos.x * width : undefined,
-      fy: pos ? pos.y * height : undefined,
-    };
-  });
+  const nodes = Object.entries(STATE.graph.nodes).map(([id, n]) => ({
+    id,
+    ...n.core,
+    detail: n.detail,
+    extra: n.extra,
+    status: STATE.progress?.nodes?.[id]?.status || 'not_started',
+  }));
   // D3 forceLink expects `source`/`target`; our schema uses `from`/`to`. Bridge here.
   const edges = STATE.graph.edges.map(e => ({ ...e, source: e.from, target: e.to }));
 
@@ -1414,8 +1388,7 @@ function renderGraph() {
     .force('link', d3.forceLink(edges).id(d => d.id).distance(d => 130 - (d.weight ?? 0.5) * 30).strength(d => 0.3 + (d.weight ?? 0.5) * 0.5))
     .force('charge', d3.forceManyBody().strength(-450))
     .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collide', d3.forceCollide(NODE_R + 12))
-    .alphaDecay(1); // 固定排版：所有節點已設定 fx/fy，立即停止模擬
+    .force('collide', d3.forceCollide(NODE_R + 12));
   STATE.sim = sim;
 
   // Edges
@@ -1495,7 +1468,7 @@ function renderGraph() {
 
   function dragStart(event, d) { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
   function dragMove(event, d)  { d.fx = event.x; d.fy = event.y; }
-  function dragEnd(event, d)   { if (!event.active) sim.alphaTarget(0); d.fx = d.x; d.fy = d.y; } // 固定在新位置，不釋放
+  function dragEnd(event, d)   { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }
 
   // Background click → clear selection
   svg.on('click', () => clearSelection());
