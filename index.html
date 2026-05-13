@@ -1373,24 +1373,24 @@ function renderGraph() {
   svg.call(zoom);
 
   // Fixed initial layout (fraction of canvas width/height)
-  // 成品在最右、進料在最左、NG桶在下方
+  // 成品在最右、進料在最左、NG桶在下方（依參考截圖精確量測）
   const FIXED_POS = {
-    part_check:       { x: 0.05, y: 0.72 },
-    vibration_bowl:   { x: 0.18, y: 0.65 },
-    muffler:          { x: 0.24, y: 0.78 },
-    retainer_plug:    { x: 0.32, y: 0.55 },
-    nachi_robot:      { x: 0.30, y: 0.32 },
-    parts_assembly:   { x: 0.40, y: 0.57 },
-    safety_stop:      { x: 0.22, y: 0.18 },
-    dispense_needle:  { x: 0.52, y: 0.50 },
-    vc3_glue:         { x: 0.48, y: 0.28 },
-    dilution_ratio:   { x: 0.52, y: 0.10 },
-    sensor:           { x: 0.64, y: 0.44 },
-    fill_rate_75:     { x: 0.73, y: 0.36 },
-    press_cylinder:   { x: 0.82, y: 0.24 },
-    finished_product: { x: 0.93, y: 0.14 },
-    ng_bin_assembly:  { x: 0.42, y: 0.88 },
-    ng_bin_glue:      { x: 0.82, y: 0.68 },
+    part_check:       { x: 0.04, y: 0.81 },  // 進料檢查 — 最左
+    vibration_bowl:   { x: 0.14, y: 0.73 },  // 震動桶入料
+    muffler:          { x: 0.23, y: 0.81 },  // 消音器
+    retainer_plug:    { x: 0.29, y: 0.62 },  // 塞子
+    nachi_robot:      { x: 0.30, y: 0.41 },  // NACHI 機械手臂
+    parts_assembly:   { x: 0.39, y: 0.59 },  // 零件結合
+    safety_stop:      { x: 0.22, y: 0.21 },  // 緊急停止
+    dispense_needle:  { x: 0.50, y: 0.53 },  // VC-3 點膠
+    vc3_glue:         { x: 0.48, y: 0.30 },  // VC-3 膠水
+    dilution_ratio:   { x: 0.50, y: 0.06 },  // 稀釋比例 — 最上
+    sensor:           { x: 0.63, y: 0.47 },  // 膠量檢查
+    fill_rate_75:     { x: 0.73, y: 0.42 },  // 膠量填充率 75%
+    press_cylinder:   { x: 0.79, y: 0.28 },  // 輸送帶烘乾＆壓合
+    finished_product: { x: 0.94, y: 0.17 },  // 成品 (END) — 最右
+    ng_bin_assembly:  { x: 0.41, y: 0.81 },  // NG 桶 (結合) — 下方
+    ng_bin_glue:      { x: 0.81, y: 0.59 },  // NG 桶 (膠量) — 下方右
   };
 
   // Prepare data
