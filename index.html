@@ -1372,14 +1372,40 @@ function renderGraph() {
     .on('zoom', (e) => root.attr('transform', e.transform));
   svg.call(zoom);
 
+  // Fixed initial layout (fraction of canvas width/height)
+  // 成品在最右、進料在最左、NG桶在下方
+  const FIXED_POS = {
+    part_check:       { x: 0.05, y: 0.72 },
+    vibration_bowl:   { x: 0.18, y: 0.65 },
+    muffler:          { x: 0.24, y: 0.78 },
+    retainer_plug:    { x: 0.32, y: 0.55 },
+    nachi_robot:      { x: 0.30, y: 0.32 },
+    parts_assembly:   { x: 0.40, y: 0.57 },
+    safety_stop:      { x: 0.22, y: 0.18 },
+    dispense_needle:  { x: 0.52, y: 0.50 },
+    vc3_glue:         { x: 0.48, y: 0.28 },
+    dilution_ratio:   { x: 0.52, y: 0.10 },
+    sensor:           { x: 0.64, y: 0.44 },
+    fill_rate_75:     { x: 0.73, y: 0.36 },
+    press_cylinder:   { x: 0.82, y: 0.24 },
+    finished_product: { x: 0.93, y: 0.14 },
+    ng_bin_assembly:  { x: 0.42, y: 0.88 },
+    ng_bin_glue:      { x: 0.82, y: 0.68 },
+  };
+
   // Prepare data
-  const nodes = Object.entries(STATE.graph.nodes).map(([id, n]) => ({
-    id,
-    ...n.core,
-    detail: n.detail,
-    extra: n.extra,
-    status: STATE.progress?.nodes?.[id]?.status || 'not_started',
-  }));
+  const nodes = Object.entries(STATE.graph.nodes).map(([id, n]) => {
+    const pos = FIXED_POS[id];
+    return {
+      id,
+      ...n.core,
+      detail: n.detail,
+      extra: n.extra,
+      status: STATE.progress?.nodes?.[id]?.status || 'not_started',
+      fx: pos ? pos.x * width : undefined,
+      fy: pos ? pos.y * height : undefined,
+    };
+  });
   // D3 forceLink expects `source`/`target`; our schema uses `from`/`to`. Bridge here.
   const edges = STATE.graph.edges.map(e => ({ ...e, source: e.from, target: e.to }));
 
@@ -1388,7 +1414,8 @@ function renderGraph() {
     .force('link', d3.forceLink(edges).id(d => d.id).distance(d => 130 - (d.weight ?? 0.5) * 30).strength(d => 0.3 + (d.weight ?? 0.5) * 0.5))
     .force('charge', d3.forceManyBody().strength(-450))
     .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collide', d3.forceCollide(NODE_R + 12));
+    .force('collide', d3.forceCollide(NODE_R + 12))
+    .alphaDecay(1); // 固定排版：所有節點已設定 fx/fy，立即停止模擬
   STATE.sim = sim;
 
   // Edges
