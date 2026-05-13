@@ -1495,7 +1495,7 @@ function renderGraph() {
 
   function dragStart(event, d) { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
   function dragMove(event, d)  { d.fx = event.x; d.fy = event.y; }
-  function dragEnd(event, d)   { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }
+  function dragEnd(event, d)   { if (!event.active) sim.alphaTarget(0); d.fx = d.x; d.fy = d.y; } // 固定在新位置，不釋放
 
   // Background click → clear selection
   svg.on('click', () => clearSelection());
